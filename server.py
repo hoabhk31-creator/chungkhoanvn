@@ -84,8 +84,20 @@ app = FastAPI(
 )
 
 # Thư mục static UI
-STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
+ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
+STATIC_DIR = os.path.join(ROOT_DIR, "static")
 os.makedirs(STATIC_DIR, exist_ok=True)
+
+# Tự động đồng bộ nếu người dùng kéo thả file ra ngoài thư mục gốc trên GitHub
+for _fn in ["index.html", "app.js", "styles.css"]:
+    _root_f = os.path.join(ROOT_DIR, _fn)
+    _stat_f = os.path.join(STATIC_DIR, _fn)
+    if os.path.exists(_root_f) and not os.path.exists(_stat_f):
+        try:
+            import shutil
+            shutil.copy2(_root_f, _stat_f)
+        except Exception:
+            pass
 
 @app.middleware("http")
 async def add_no_cache_headers(request, call_next):
@@ -126,11 +138,23 @@ class ExportRequest(BaseModel):
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_dashboard():
-    index_file = os.path.join(STATIC_DIR, "index.html")
-    if os.path.exists(index_file):
-        with open(index_file, "r", encoding="utf-8") as f:
-            return HTMLResponse(content=f.read())
-    return HTMLResponse("<h2>IERM Dashboard is initializing... Please refresh shortly.</h2>")
+    for candidate in [
+        os.path.join(STATIC_DIR, "index.html"),
+        os.path.join(ROOT_DIR, "index.html"),
+    ]:
+        if os.path.exists(candidate):
+            with open(candidate, "r", encoding="utf-8") as f:
+                return HTMLResponse(content=f.read())
+    return HTMLResponse(
+        "<div style='font-family:sans-serif;padding:30px;max-width:650px;margin:50px auto;border:1px solid #cbd5e1;border-radius:12px;background:#f8fafc;box-shadow:0 4px 6px -1px rgba(0,0,0,0.1);'>"
+        "<h2 style='color:#e11d48;margin-top:0;'>⚠️ Chưa có file giao diện (index.html)</h2>"
+        "<p style='color:#334155;line-height:1.6;'>Máy chủ Render đã kích hoạt thành công, nhưng repository trên GitHub của bạn <b>chưa có thư mục <code>static</code></b> (chứa <code>index.html</code>, <code>app.js</code>, <code>styles.css</code>).</p>"
+        "<div style='background:#f1f5f9;padding:15px;border-radius:8px;border-left:4px solid #0284c7;margin:15px 0;'>"
+        "<strong style='color:#0369a1;'>👉 Cách xử lý nhanh:</strong><br>"
+        "Vào GitHub repository của bạn &rarr; bấm <b>Add file</b> &rarr; <b>Upload files</b> &rarr; tải thư mục <b><code>static</code></b> (hoặc cả 3 file <code>index.html</code>, <code>app.js</code>, <code>styles.css</code>) lên &rarr; Render sẽ tự tải lại web trong 1 phút."
+        "</div>"
+        "</div>"
+    )
 
 
 CLIENT_ERROR_LOGS = []
